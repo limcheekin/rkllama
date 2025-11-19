@@ -5,7 +5,7 @@ services:
     build: .
     privileged: true
     volumes:
-      - /mnt/emmc/ws/rk/rkllama/models:/opt/rkllama/models
+      - /mnt/nvme/shared/ws/rk/rkllama/models:/opt/rkllama/models
     ports:
       - "11432:8080"
     restart: unless-stopped
