@@ -863,7 +863,7 @@ class GenerateImageEndpointHandler(EndpointHandler):
         # Use config for models path
         model_dir = os.path.join(rkllama.config.get_path("models"), model_name)
 
-        # Send the task of embedding to the model
+        # Send the task of generate image to the model
         image_list = variables.worker_manager_rkllm.generate_image(model_name, model_dir, prompt, size, num_images, seed, num_inference_steps, guidance_scale)
         
         # Calculate metrics
@@ -874,4 +874,146 @@ class GenerateImageEndpointHandler(EndpointHandler):
 
         # Return response
         return jsonify(response), 200
+    
+
+
+class GenerateSpeechEndpointHandler(EndpointHandler):
+    """Handler for v1/audio/speech endpoint requests"""
+    
+    @staticmethod
+    def format_complete_response(audio, model_name, model_dir, output_format, response_format, metrics):
+        """Format a complete non-streaming response for generate endpoint"""
+
+        # Construct the default base64 response format
+        data = [{"b64_json": get_base64_image_from_pil(img, output_format)} for img in image_list]
+
+        if response_format == "url":
+            # Construct the output dir for images
+            output_dir = f"{model_dir}/images"
+
+            # Construct the url response format
+            data = [{"url": get_url_image_from_pil(img, model_name, output_dir, output_format)} for img in image_list]
+
+        response = {
+            "created": int(time.time()),
+            "data": data,
+            "usage": {
+                "total_tokens": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "input_tokens_details": {
+                    "text_tokens": 0,
+                    "image_tokens": 0
+                }
+            }
+        }
+        
+        return response
+    
+    @classmethod
+    def handle_request(cls, model_name,input,voice,response_format,stream_format,volume,length_scale,noise_scale,noise_w_scale,normalize_audio):
+        """Process a generate request with proper format handling"""
+        
+        def stream_bytes(data: bytes, chunk_size: int = 1024): # 1024 CHunk sizes
+            for i in range(0, len(data), chunk_size):
+                yield data[i:i + chunk_size]
+
+        if DEBUG_MODE:
+            logger.debug(f"GenerateSpeechEndpointHandler: processing request for {model_name}")
+        
+        # Check if streaming or not
+        if stream_format == "sse":
+
+            # Streaming not supported yet for audio generation
+            return Response("Streaming not supported yet for audio generation", status=400)
+        
+
+        else:
+            # Audio output 
+            audio_bytes, media_type =  cls.handle_complete(model_name,input,voice,response_format,stream_format,volume,length_scale,noise_scale,noise_w_scale,normalize_audio)
+        
+            # COnstruct the response
+            response = Response(
+                response=stream_bytes(audio_bytes),
+                mimetype=media_type
+            )
+
+            # Set the headers
+            response.headers["Content-Length"] = str(len(audio_bytes))
+            response.headers["Accept-Ranges"] = "bytes"
+            
+            # Return response
+            return response
+    
+    @classmethod
+    def handle_complete(cls, model_name,input,voice,response_format,stream_format,volume,length_scale,noise_scale,noise_w_scale,normalize_audio):
+        """Handle complete generate speech response"""
+
+        # Use config for models path
+        model_dir = os.path.join(rkllama.config.get_path("models"), model_name)
+
+        # Send the task of generate speech to the model
+        audio = variables.worker_manager_rkllm.generate_speech(model_name, model_dir, input,voice,response_format,stream_format,volume,length_scale,noise_scale,noise_w_scale,normalize_audio)
+        
+        # Return the audio
+        return audio
+    
+
+
+class GenerateTranscriptionsEndpointHandler(EndpointHandler):
+    """Handler for v1/audio/transcriptions endpoint requests"""
+    
+    @staticmethod
+    def format_complete_response(text, response_format):
+        """Format a complete non-streaming response for generate endpoint"""
+
+        response ={
+            "text": text,
+            "usage": {
+                "type": "tokens",
+                "input_tokens": 0,
+                "input_token_details": {
+                "text_tokens": 0,
+                "audio_tokens": 0
+                },
+                "output_tokens": 0,
+                "total_tokens": 0
+            }
+        }
+        
+        return response
+    
+    @classmethod
+    def handle_request(cls, model_name,file, language, response_format, stream):
+        """Process a generate request with proper format handling"""
+        
+        if DEBUG_MODE:
+            logger.debug(f"GenerateTranscriptionsEndpointHandler: processing request for {model_name}")
+        
+        # Check if streaming or not
+        if stream:
+
+            # Streaming not supported yet for audio generation
+            return Response("Streaming not supported yet for audio transcription", status=400)
+        
+
+        else:
+            # Transcription output 
+            transcription_text =  cls.handle_complete(model_name,file, language, response_format)
+        
+            # Return response
+            return cls.format_complete_response(transcription_text, response_format)
+    
+    @classmethod
+    def handle_complete(cls, model_name,file, language, response_format):
+        """Handle complete generate transcription response"""
+
+        # Use config for models path
+        model_dir = os.path.join(rkllama.config.get_path("models"), model_name)
+
+        # Send the task of generate transcription to the model
+        transcription_text = variables.worker_manager_rkllm.generate_transcription(model_name, model_dir, file, language, response_format)
+        
+        # Return the transcription text
+        return transcription_text
     
